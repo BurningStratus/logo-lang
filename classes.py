@@ -56,6 +56,22 @@ class Debugger:
             f'Error:\t{message} at line {self.lexer.line}')
             #:\t\033[0;31m{line_list[self.lexer.line]}\033[0m')
 
+class Stack:
+    def __init__(self):
+        self.stack = []
+    def push(self, value):
+        self.stack.append(value)
+    def pop(self):
+        if len(self.stack) > 0:
+            return self.stack.pop()
+        else:
+            return None
+    def top(self):
+        if len(self.stack) > 0:
+            return self.stack[-1]
+        else:
+            return None
+
 class Tokens:
     # this class is responsible for providing 
     # an iterator to spit out tokens
@@ -124,6 +140,7 @@ class Procedure:
         self.expected_args = []
         for arg in argv:
             self.expected_args.append(arg)
+        self.arg_count = len(self.expected_args)
 
     def arg_type(arg, pos):
         if type(arg) == int or type(arg) == float:
@@ -136,12 +153,14 @@ class Procedure:
         arg_vector = []
         for arg in argv:
             arg_vector.append(arg)
-        self.name(*arg_vector)
+        arg_vector = arg_vector[::-1]
+        self.reference(*arg_vector)
 
 class Environment:
     def __init__(self, parent=None):
         self.variables = {}
         self.procedures = {}
+        self.stack = Stack()
         self.parent = parent
 
     def get_env(self, name):
@@ -151,12 +170,12 @@ class Environment:
             return self.procedures[name]
         else:
             return None
+
     def set_variable(self, name, value):
         self.variables[name] = value
 
     def set_procedure(self, name, handler):
         self.procedures[name] = handler
-
 
 class Lexer:
     '''
