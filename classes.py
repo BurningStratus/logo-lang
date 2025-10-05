@@ -106,6 +106,7 @@ class Tokens:
         #endif
 
         self.token_amt += 1
+        #print(f"TOKEN: .{token.value}::\t{token.type}.")
         return token
     def peek_token(self):
         # if there is a returned token, it will be taken next.
@@ -143,10 +144,10 @@ class Procedure:
         self.arg_count = len(self.expected_args)
 
     def arg_type(arg, pos):
+        # arg type checking 'any' is included
         if type(arg) == int or type(arg) == float:
             return 'number_literal'
         if type(arg) == str:
-        # TODO: add dictionary here somehow. connect 'logo' and 'Procedure' classes
             return 'string_literal'
 
     def call(self, *argv):
@@ -167,7 +168,7 @@ class Environment:
         if name in self.variables:
             return self.variables[name]
         elif name in self.procedures:
-            return self.procedures[name]
+            return self.procedures[name].name
         else:
             return None
 
@@ -224,16 +225,16 @@ class Lexer:
         self.column = 0 # char position on the current line
         self.keywords = []
         self.token_spec = [
+            ("argv_begin",      r'\('),     # start of argument vector
+            ("argv_end",        r'\)'),     # end of args vector
+            ("list",            r'[\[\]]'),     # end of the list
             # all strings are changed to string_literal later
             ("string_literal_terminated",       r'\"(.*?)"(?!\w+)'),
-            ("string_literal_unterminated",     r'\"\w+\s?'),
+            ("string_literal_unterminated",     r'\"\w+(?=\s)'),
             ("number_literal",  r'\d+(\.\d*)?'),    # int or float
             #("list_begin",      r'\['),     # start of the list
             #("list_end",        r'\]'),     # end of the list
-            ("list",            r'[\[\]]'),     # end of the list
             ("operator",        r'[\+\-\*/%]'), # operator
-            ("argv_begin",      r'\('),     # start of argument vector
-            ("argv_end",        r'\)'),     # end of args vector
             ("variable",        r':\w+'),   # variable
             ("identifier",      r'\w+'),    # names of procedures
             ("eol",             r'\n'),
@@ -275,7 +276,7 @@ class Lexer:
         "eol",
         '''
 
-        for mo in regex.finditer(tok_regex, self.code):
+        for mo in regex.finditer(tok_regex, self.code, regex.MULTILINE):
             kind = mo.lastgroup
             value = mo.group()
             self.column = mo.start() - line_start 
@@ -294,7 +295,6 @@ class Lexer:
             elif kind == 'eol':
                 line_start = mo.end()
                 self.line += 1
-                continue
 
             # NOTE: not implemented
             elif kind == 'MISMATCH':
@@ -304,11 +304,12 @@ class Lexer:
         #endfor
 
 def test_lexer():
-    l = Lexer('show 10\n:e\n show :hh\n[ "echo " "bravo ]\n(show "echo "foxtrot)', ['show'])
+    l = Lexer('show "ech\nshow 10\n :e\n[ "echo " "bravo ]\n(show "echo "foxtrot)\n', ['show'])
     t = l.tokens()
     while True:
         try:
             tk = next(t)
+            if tk.value == '\n': tk.value = tk.value.replace("\n","\\n")
             print(f'{tk.type}', f':{tk.value}.', sep='\t')
         except StopIteration:
             break

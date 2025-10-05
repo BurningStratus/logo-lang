@@ -19,14 +19,11 @@
 #   and mutators/selectors (`item`, `setitem`, etc.)
 # Queries: Functions like `count`, `ascii`, `char`, `uppercase`, etc.
 
-
-# TODO: current 'model' executes tokens just when it encounters them. 
-# It should parse the line till the end first and make an execution stack of some sort
-
+# TODO: abandon python turtle and use bmp-generator
 
 import operator
 import re as regex
-import turtle as t
+#import turtle
 from sys import argv
 
 # custom headers
@@ -36,13 +33,15 @@ from classes import Token, Tokens, Procedure, Lexer
 
 #https://www.calormen.com/jslogo/language.html
 class Logo(Logger, Debugger):
-    def __init__(self, text=None, t=None):
-        self.t = t.Turtle()
+    def __init__(self, text=None, turtle=None):
+        #self.t = turtle.Turtle
 
         self.base_env = Environment()
         # create and register a new procedure in global env
-        self.base_env.set_procedure("show", Procedure("show", self.show_builtin))
-        self.base_env.set_procedure("print", Procedure("print", self.print_builtin))
+        self.base_env.set_procedure("show", Procedure("show", self.show_builtin, "any"))
+        self.base_env.set_procedure("print", Procedure("print", self.print_builtin, "any"))
+        self.base_env.set_procedure("sum", Procedure("sum", self.sum_builtin, "number_literal","number_literal"))
+        self.base_env.set_procedure("forward", Procedure("forward", self.t.forward, "number_literal"))
         '''
         self.builtins ={
             'show'      :Procedure("show", self.show_builtin),
@@ -84,11 +83,7 @@ class Logo(Logger, Debugger):
             #'difference':self.sum_expressions_builtin,
         }
         '''
-        # dictionary is a list of all supported commands
-        #self.builtin_dictionary = list(self.builtins.keys())
-
-        #self.dictionary = self.builtin_dictionary+list(self.subcommands.keys())
-        self.dictionary = list(self.base_env.procedures.keys()) # NOTE: newer
+        self.dictionary = list(self.base_env.procedures.keys())
         self.builtin_dictionary = list(self.base_env.procedures.keys())
 
         # lexer takes the code and keyword list
@@ -104,90 +99,25 @@ class Logo(Logger, Debugger):
         self.peek_token = self.tokenizer.peek_token # zalipuha !
         self.return_token = self.tokenizer.return_token # zalipuha !
     
-    """
-    def stack_push(self, arg, stack=None):
-        # pass by reference is a bit complicated in python
-        stack_snapshot =None
-        if stack is not None:
-            stack_snapshot = self.stack
-            self.stack = stack
-
-        self.stack.append(arg)
-        self.log(stack,"STACK CONTENTS:")
-        if stack_snapshot is not None: self.stack =stack_snapshot
-
-    def stack_pop(self, stack=None):
-        # pass by reference is a bit complicated in python
-        stack_snapshot =None
-        if stack is not None:
-            stack_snapshot = self.stack
-            self.stack = stack
-
-        self.log(self.stack, "POP:")
-        if stack_snapshot is not None:
-            if self.stack is not None and len(self.stack) > 0:
-                value =self.stack.pop()
-                self.stack =stack_snapshot
-                return value
-            else:
-                self.stack =stack_snapshot
-                return None
-
-        if self.stack is not None and len(self.stack) > 0:
-            return self.stack.pop()
-        else:
-            return None
-    
-    def stack_top(self):
-        # return the top element without popping it
-        if self.stack is not None and len(self.stack) > 0:
-            return self.stack[-1]
-        else:
-            return None
-    """
-
     ##PARSE PROCESS################################################################
     # start the parsing process
     def parse_program(self):
-        if not self.parse_statement():
-            self.raise_error('Expected: statement')
         while self.peek_token() is not None:
-            if not self.parse_statement():
-                self.raise_error('Expected: statement')
-
-        return True
-
-    # TODO: inline parsing:^fd 100 rt 100 fd 100$
-    def parse_statement(self, execute_builtin=True):
-        if not self.parse_builtin_dictionary(execute_builtin) \
-            and not self.parse_expression():
-                self.raise_error('Unknown statement')
-
-        # if next token is a command
-
-        if self.peek_token() and self.peek_token().type != 'eol':
-            breakpoint()
-            if not self.parse_builtin_dictionary():
-                self.raise_error("Expected: end of line")
-        else:
-            self.next_token()
-
-        #### collapse the call stack for current line
-        #breakpoint()
-        self.call_stack
+            while self.peek_token().type != 'eol':
+                if not self.parse_builtin_dictionary() and not self.parse_expression():
+                    self.raise_error('Unknown statement')
+                #breakpoint()
+            #done
+            self.next_token() # get the \n
+            #### collapse the call stack for current line(execute)
+            self.collapse_call_stack()
 
         return True
 
     def parse_expression(self):
         token =self.next_token()
-        '''
-        if token.type == 'identifier'
-            and token.value not in self.subcommands:
-            self.return_token(token)
-            return False
-        '''
 
-        # TODO: track depth to introduce nested arrays
+        # TODO: nested arrays
         if token.value == '[':
             list_ = []
             while True: 
@@ -254,8 +184,10 @@ class Logo(Logger, Debugger):
 
             #fref.call(*arg_list)
             self.call_stack.push( (fref,arg_list))
-        else:
+        elif token.type != 'eol' and token.type != 'identifier':
             self.stack.push(token.value)
+        else:
+            return False
 
         return True
 
@@ -268,43 +200,50 @@ class Logo(Logger, Debugger):
         }
         return True
 
-    def parse_builtin_dictionary(self, execute=True):
-        token =self.next_token()
+    def parse_builtin_dictionary(self):
+        token =self.peek_token()
 
         # if token.value is a procedure
         #if token.value not in self.builtin_dictionary:
         if token.value != self.base_env.get_env(token.value):
-            self.return_token(token)
             self.log(token, "token was returned in parse_builtin:")
             return False
+        else:
+            self.next_token()
 
-        if execute:
-            # self.builtins[token.value](self)
-            # fetch the procedure from the environment
-            fref = self.base_env.get_env(token.value)
-            if not fref:
-                self.raise_error("Procedure does not exist")
+        #### 
+        fref = self.base_env.get_env(token.value)
+        if not fref:
+            self.raise_error("Procedure does not exist")
 
-            arg_list = []
+        # TODO: pass arg_list to call_stack with fref
+        self.call_stack.push( (fref,) )
+        return True
 
-            i = 0
-            while True:
-                value = self.stack.pop()
-                if value is None: self.raise_error("Not enough arguments provided")
-                else: arg_list.append(value)
+    def collapse_call_stack(self):
+        while True:
+            frame = self.call_stack.pop()
+            if frame is None:
+                break
 
-                if i == fref.arg_count: break
-                i+=1
-
-            #fref.call(*arg_list)
-            self.call_stack.push( (fref,arg_list) )
+            # get a ref to procedure using the name
+            fref = self.base_env.procedures[frame[0]]
+            if len(frame) > 1:
+                fref.call(*frame[1]) # in case if vector is included
+            else:
+                # pop the expected amount of args
+                arg_list = []
+                for arg in range(fref.arg_count):
+                    arg_list.append(self.stack.pop())
+                fref.call(*arg_list)
 
         return True
 
 ##PARSE PROCESS################################################################
 
 ##BUILTIN HANDLERS#############################################################
-    def print_builtin(self, use_all_args=False, *args, **kwargs):
+
+    def print_builtin(self, *args, **kwargs):
         print(*args, sep=" ", end="\n")
         return True
 
@@ -347,7 +286,6 @@ class Logo(Logger, Debugger):
         while self.peek_token().type != "list":
             statements.append(self.next_token().value)
 
-        breakpoint()
         return True
 
     def make_variable_builtin(self, *args, **kwargs):
@@ -369,6 +307,12 @@ class Logo(Logger, Debugger):
 
         self.variable_dict[varname] = varval
         return True
+
+    def sum_builtin(self, *args):
+        result = 0
+        for arg in args:
+            result += arg
+        self.stack.push(result)
 
     def sum_expressions_builtin(self):
         expr0, expr1 = None,None
@@ -409,7 +353,7 @@ def main():
     with open(argv[1], 'r') as fd:
         text =fd.read()
 
-    lexer   =Logo(text,t)
+    lexer   =Logo(text)
     lexer.write_log =False
     lexer.run()
 
