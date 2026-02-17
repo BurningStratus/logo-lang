@@ -23,7 +23,7 @@
 
 import operator
 import re as regex
-#import turtle
+import turtle
 from sys import argv
 
 # custom headers
@@ -34,7 +34,7 @@ from classes import Token, Tokens, Procedure, Lexer
 #https://www.calormen.com/jslogo/language.html
 class Logo(Logger, Debugger):
     def __init__(self, text=None, turtle=None):
-        #self.t = turtle.Turtle
+        self.t = turtle.Turtle
 
         self.base_env = Environment()
         # create and register a new procedure in global env
